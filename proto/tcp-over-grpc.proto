@@ -7,10 +7,7 @@ service TcpOverGrpcService {
 }
 
 message IngressMessage {
-    fixed32 target_address = 1;
-    int32 target_port = 2;
-
-    bytes data = 3;
+    bytes data = 1;
 }
 
 message EgressMessage {
