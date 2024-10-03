@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package tcp_over_grpc;
+
+service TcpOverGrpcService {
+    rpc WrapTcpStream(stream IngressMessage) returns (stream EgressMessage) {}
+}
+
+message IngressMessage {
+    fixed32 target_address = 1;
+    int32 target_port = 2;
+
+    bytes data = 3;
+}
+
+message EgressMessage {
+    bytes data = 1;
+}
