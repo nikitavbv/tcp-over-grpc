@@ -56,8 +56,6 @@ enum CommandMode {
 
 #[tokio::main]
 async fn main() {
-    println!("tcp-over-grpc is running");
-
     match Args::parse().mode {
         CommandMode::Exit { bind_addr, target_addr } => run_server(bind_addr, target_addr).await,
         CommandMode::Entry {
@@ -82,6 +80,8 @@ async fn main() {
 }
 
 async fn run_client(bind_addr: String, target_url: String, headers: HashMap<String, String>) {
+    println!("running tcp-over-grpc client on {}", bind_addr);
+
     let listener = TcpListener::bind(bind_addr).await.unwrap();
 
     loop {
@@ -136,6 +136,8 @@ async fn run_client(bind_addr: String, target_url: String, headers: HashMap<Stri
 }
 
 async fn run_server(bind_addr: String, target_addr: String) {
+    println!("running tcp-over-grpc server on {}", bind_addr);
+
     Server::builder()
         .add_service(TcpOverGrpcServiceServer::new(TcpOverGrpcHandler::new(target_addr)))
         .serve(bind_addr.parse().unwrap())
