@@ -1,6 +1,13 @@
 use {
     std::{pin::Pin, collections::HashMap},
-    tonic::{transport::Server, Status, Request, Streaming, Response, metadata::{AsciiMetadataValue, AsciiMetadataKey}},
+    tonic::{
+        transport::{Server, Channel, ClientTlsConfig},
+        Status,
+        Request,
+        Streaming,
+        Response,
+        metadata::{AsciiMetadataValue, AsciiMetadataKey},
+    },
     tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream},
     tokio::{net::{TcpStream, TcpListener}, io::{AsyncWriteExt, AsyncReadExt}, sync::mpsc},
     clap::{Parser, Subcommand},
@@ -81,7 +88,10 @@ async fn run_client(bind_addr: String, target_url: String, headers: HashMap<Stri
         let (socket, _) = listener.accept().await.unwrap();
         let (mut tcp_read, mut tcp_write) = socket.into_split();
 
-        let mut client = TcpOverGrpcServiceClient::connect(target_url.clone()).await.unwrap();
+        let endpoint = Channel::from_shared(target_url.clone()).unwrap()
+            .tls_config(ClientTlsConfig::new().with_enabled_roots())
+            .unwrap();
+        let mut client = TcpOverGrpcServiceClient::connect(endpoint).await.unwrap();
 
         let (tx, rx) = mpsc::channel(128);
         let in_stream = ReceiverStream::new(rx);
