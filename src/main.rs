@@ -3,6 +3,7 @@ use {
     tonic::{transport::Server, Status, Request, Streaming, Response},
     tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream},
     tokio::{net::{TcpStream, TcpListener}, io::{AsyncWriteExt, AsyncReadExt}, sync::mpsc},
+    clap::{Parser, Subcommand},
     crate::rpc::{
         tcp_over_grpc_service_server::{TcpOverGrpcService, TcpOverGrpcServiceServer},
         tcp_over_grpc_service_client::TcpOverGrpcServiceClient,
@@ -15,20 +16,52 @@ mod rpc {
     tonic::include_proto!("tcp_over_grpc");
 }
 
+#[derive(Parser, Debug)]
+#[command(version)]
+struct Args {
+    #[clap(subcommand)]
+    mode: CommandMode,
+}
+
+#[derive(Debug, Subcommand)]
+enum CommandMode {
+    /// Spin up entry node. Receives incoming TCP and forwards GRPC.
+    Entry {
+        #[clap(short, long, default_value = "localhost:1415")]
+        bind_addr: String,
+
+        /// URL of the exit node
+        #[clap(short, long, value_parser)]
+        target_url: String,
+    },
+    /// Spin up exit node. Receives incoming GRPC and forwards TCP.
+    Exit {
+        #[clap(short, long, default_value = "localhost:8080")]
+        bind_addr: String,
+
+        #[clap(short, long)]
+        target_addr: String,
+    }
+}
+
 #[tokio::main]
 async fn main() {
     println!("tcp-over-grpc is running");
-    run_client().await;
+
+    match Args::parse().mode {
+        CommandMode::Exit { bind_addr, target_addr } => run_server(bind_addr, target_addr).await,
+        CommandMode::Entry { bind_addr, target_url } => run_client(bind_addr, target_url).await,
+    }
 }
 
-async fn run_client() {
-    let listener = TcpListener::bind("0.0.0.0:8081").await.unwrap();
+async fn run_client(bind_addr: String, target_url: String) {
+    let listener = TcpListener::bind(bind_addr).await.unwrap();
 
     loop {
         let (socket, _) = listener.accept().await.unwrap();
         let (mut tcp_read, mut tcp_write) = socket.into_split();
 
-        let mut client = TcpOverGrpcServiceClient::connect("http://127.0.0.1:8080").await.unwrap();
+        let mut client = TcpOverGrpcServiceClient::connect(target_url.clone()).await.unwrap();
 
         let (tx, rx) = mpsc::channel(128);
         let in_stream = ReceiverStream::new(rx);
@@ -62,17 +95,24 @@ async fn run_client() {
     }
 }
 
-async fn run_server() {
+async fn run_server(bind_addr: String, target_addr: String) {
     Server::builder()
-        .add_service(TcpOverGrpcServiceServer::new(TcpOverGrpcHandler))
-        .serve("0.0.0.0:8080".parse().unwrap())
+        .add_service(TcpOverGrpcServiceServer::new(TcpOverGrpcHandler::new(target_addr)))
+        .serve(bind_addr.parse().unwrap())
         .await
         .unwrap();
 }
 
-struct TcpOverGrpcHandler;
+struct TcpOverGrpcHandler {
+    target_addr: String,
+}
 
 impl TcpOverGrpcHandler {
+    pub fn new(target_addr: String) -> Self {
+        Self {
+            target_addr,
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -81,7 +121,7 @@ impl TcpOverGrpcService for TcpOverGrpcHandler {
 
     async fn wrap_tcp_stream(&self, req: Request<Streaming<IngressMessage>>) -> Result<Response<Self::WrapTcpStreamStream>, Status> {
         let mut req_stream = req.into_inner();
-        let target_stream = TcpStream::connect("tcpbin.com:4242").await.unwrap();
+        let target_stream = TcpStream::connect(&self.target_addr).await.unwrap();
         let (mut rx, mut tx) = target_stream.into_split();
         let (res_tx, res_rx) = mpsc::channel(128);
 

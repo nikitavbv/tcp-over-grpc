@@ -8,6 +8,7 @@ tokio = { version = "1.40.0", features = ["full"] }
 tonic = "0.12.3"
 prost = "0.13.3"
 tokio-stream = "0.1.16"
+clap = { version = "4.5.19", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.12.3"
