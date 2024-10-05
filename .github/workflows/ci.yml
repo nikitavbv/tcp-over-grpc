@@ -38,7 +38,7 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-  build arm64:
+  build-arm64:
     name: build arm64
     runs-on: ubuntu-latest
     env:
