@@ -14,6 +14,9 @@ jobs:
         toolchain: stable
         override: true
     - uses: swatinem/rust-cache@v2
+    - uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: actions-rs/cargo@v1
       with:
         command: build
