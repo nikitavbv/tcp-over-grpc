@@ -1,6 +1,6 @@
 use {
-    std::pin::Pin,
-    tonic::{transport::Server, Status, Request, Streaming, Response},
+    std::{pin::Pin, collections::HashMap},
+    tonic::{transport::Server, Status, Request, Streaming, Response, metadata::{AsciiMetadataValue, AsciiMetadataKey}},
     tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream},
     tokio::{net::{TcpStream, TcpListener}, io::{AsyncWriteExt, AsyncReadExt}, sync::mpsc},
     clap::{Parser, Subcommand},
@@ -33,6 +33,9 @@ enum CommandMode {
         /// URL of the exit node
         #[clap(short, long, value_parser)]
         target_url: String,
+
+        #[clap(short, long, value_parser)]
+        headers: Vec<String>,
     },
     /// Spin up exit node. Receives incoming GRPC and forwards TCP.
     Exit {
@@ -50,11 +53,28 @@ async fn main() {
 
     match Args::parse().mode {
         CommandMode::Exit { bind_addr, target_addr } => run_server(bind_addr, target_addr).await,
-        CommandMode::Entry { bind_addr, target_url } => run_client(bind_addr, target_url).await,
+        CommandMode::Entry {
+            bind_addr,
+            target_url,
+            headers ,
+        } => run_client(
+            bind_addr,
+            target_url,
+            headers
+                .into_iter()
+                .map(|header| {
+                    let colon_index = header.find(':').unwrap();
+                    let (k, v) = header.split_at(colon_index);
+                    let k = k.trim().to_owned().to_lowercase();
+                    let v = v[1..].trim().to_owned();
+                    (k, v)
+                })
+                .collect::<HashMap<String, String>>()
+        ).await,
     }
 }
 
-async fn run_client(bind_addr: String, target_url: String) {
+async fn run_client(bind_addr: String, target_url: String, headers: HashMap<String, String>) {
     let listener = TcpListener::bind(bind_addr).await.unwrap();
 
     loop {
@@ -65,7 +85,17 @@ async fn run_client(bind_addr: String, target_url: String) {
 
         let (tx, rx) = mpsc::channel(128);
         let in_stream = ReceiverStream::new(rx);
-        let mut res = client.wrap_tcp_stream(in_stream).await.unwrap().into_inner();
+
+        let mut req = Request::new(in_stream);
+        for (k, v) in &headers {
+            req.metadata_mut()
+                .append(
+                    AsciiMetadataKey::from_bytes(k.as_bytes()).unwrap(),
+                    AsciiMetadataValue::try_from(v).unwrap()
+                );
+        }
+
+        let mut res = client.wrap_tcp_stream(req).await.unwrap().into_inner();
 
         tokio::spawn(async move {
             let mut buf = vec![0; 1024];
