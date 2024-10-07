@@ -19,9 +19,8 @@ use {
     },
 };
 
-mod rpc {
-    tonic::include_proto!("tcp_over_grpc");
-}
+mod rpc;
+mod stream;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -51,7 +50,7 @@ enum CommandMode {
 
         #[clap(short, long)]
         target_addr: String,
-    }
+    },
 }
 
 #[tokio::main]
