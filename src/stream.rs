@@ -1,5 +1,5 @@
 use {
-    std::{collections::HashMap, future::Future, task::Poll, pin::Pin, io},
+    std::{collections::HashMap, future::Future, task::Poll, pin::Pin, io::{self, ErrorKind}},
     tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::{self, Sender}},
     tokio_stream::{wrappers::ReceiverStream, Stream},
     tonic::{
@@ -70,7 +70,12 @@ impl AsyncRead for TcpOverGrpcStream {
         match stream_next {
             Poll::Ready(v) => {
                 if let Some(v) = v {
-                    let v = v.unwrap();
+                    let v = match v {
+                        Ok(v) => v,
+                        Err(err) => return Poll::Ready(
+                            io::Result::Err(io::Error::new(ErrorKind::Other, format!("grpc error: {:?}", err)))
+                        ),
+                    };
                     let slice_to_put = buf.remaining().min(v.data.len());
 
                     buf.put_slice(&v.data[0..slice_to_put]);
