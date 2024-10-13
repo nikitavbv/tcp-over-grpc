@@ -24,7 +24,7 @@ pub struct TcpOverGrpcStream {
 }
 
 impl TcpOverGrpcStream {
-    pub async fn new(endpoint: String, headers: HashMap<String, String>) -> Self {
+    pub async fn new(endpoint: String, headers: HashMap<String, String>) -> io::Result<Self> {
         let endpoint = Channel::from_shared(endpoint).unwrap()
             .tls_config(ClientTlsConfig::new().with_enabled_roots())
             .unwrap();
@@ -41,13 +41,17 @@ impl TcpOverGrpcStream {
                 );
         }
 
-        let rx_stream = client.wrap_tcp_stream(req).await.unwrap().into_inner();
-        Self {
+        let rx_stream = client.wrap_tcp_stream(req)
+            .await
+            .map_err(|err| io::Error::new(ErrorKind::Other, format!("failed to wrap tcp stream: {:?}", err)))?
+            .into_inner();
+
+        Ok(Self {
             tx_stream,
             rx_stream,
 
             read_buffer: Vec::new(),
-        }
+        })
     }
 }
 
